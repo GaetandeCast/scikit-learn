@@ -492,24 +492,6 @@ class BaseGradientBoosting(BaseEnsemble, metaclass=ABCMeta):
                 X, neg_g_view[:, k], sample_weight=sample_weight, check_input=False
             )
 
-            # update tree leaves
-            X_for_tree_update = X_csr if X_csr is not None else X
-            _update_terminal_regions(
-                self._loss,
-                tree.tree_,
-                X_for_tree_update,
-                y,
-                neg_g_view[:, k],
-                raw_predictions,
-                sample_weight,
-                sample_mask,
-                learning_rate=self.learning_rate,
-                k=k,
-            )
-
-            # add tree to ensemble
-            self.estimators_[i, k] = tree
-
             if hasattr(self, "_ufi_feature_importances"):
                 self._ufi_feature_importances += (
                     tree.compute_unbiased_feature_importance_and_oob_predictions(
@@ -528,6 +510,24 @@ class BaseGradientBoosting(BaseEnsemble, metaclass=ABCMeta):
                         method="mdi_oob",
                     )[0]
                 )
+
+            # update tree leaves
+            X_for_tree_update = X_csr if X_csr is not None else X
+            _update_terminal_regions(
+                self._loss,
+                tree.tree_,
+                X_for_tree_update,
+                y,
+                neg_g_view[:, k],
+                raw_predictions,
+                sample_weight,
+                sample_mask,
+                learning_rate=self.learning_rate,
+                k=k,
+            )
+
+            # add tree to ensemble
+            self.estimators_[i, k] = tree
 
         return raw_predictions
 
