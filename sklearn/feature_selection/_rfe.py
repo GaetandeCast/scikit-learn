@@ -42,7 +42,9 @@ from sklearn.utils.validation import (
 )
 
 
-def _rfe_single_fit(rfe, estimator, X, y, train, test, scorer, routed_params):
+def _rfe_single_fit(
+    rfe, estimator, X, y, X_test_ext, y_test_ext, train, test, scorer, routed_params
+):
     """
     Return the score and n_features per step for a fit across one fold.
     """
@@ -58,6 +60,8 @@ def _rfe_single_fit(rfe, estimator, X, y, train, test, scorer, routed_params):
     rfe._fit(
         X_train,
         y_train,
+        X_test_ext,
+        y_test_ext,
         lambda estimator, features: _score(
             estimator,
             X_test[:, features],
@@ -247,7 +251,7 @@ class RFE(SelectorMixin, MetaEstimatorMixin, BaseEstimator):
         # RFE.estimator is not validated yet
         prefer_skip_nested_validation=False
     )
-    def fit(self, X, y, **fit_params):
+    def fit(self, X, y, X_test=None, y_test=None, **fit_params):
         """Fit the RFE model and then the underlying estimator on the selected features.
 
         Parameters
@@ -279,9 +283,9 @@ class RFE(SelectorMixin, MetaEstimatorMixin, BaseEstimator):
         else:
             routed_params = Bunch(estimator=Bunch(fit=fit_params))
 
-        return self._fit(X, y, **routed_params.estimator.fit)
+        return self._fit(X, y, X_test, y_test, **routed_params.estimator.fit)
 
-    def _fit(self, X, y, step_score=None, **fit_params):
+    def _fit(self, X, y, X_test=None, y_test=None, step_score=None, **fit_params):
         # Parameter step_score controls the calculation of self.step_scores_
         # step_score is not exposed to users and is used when implementing RFECV
         # self.step_scores_ will not be calculated when calling _fit through fit
@@ -351,6 +355,8 @@ class RFE(SelectorMixin, MetaEstimatorMixin, BaseEstimator):
             importances = _get_feature_importances(
                 estimator,
                 self.importance_getter,
+                X_test[:, features] if X_test else None,
+                y_test,
                 transform_func="square",
             )
             ranks = np.argsort(importances)
@@ -805,7 +811,7 @@ class RFECV(RFE):
         # RFECV.estimator is not validated yet
         prefer_skip_nested_validation=False
     )
-    def fit(self, X, y, *, groups=None, **params):
+    def fit(self, X, y, *, X_test=None, y_test=None, groups=None, **params):
         """Fit the RFE model and automatically tune the number of selected features.
 
         Parameters
@@ -906,7 +912,18 @@ class RFECV(RFE):
             func = delayed(_rfe_single_fit)
 
         step_results = parallel(
-            func(clone(rfe), self.estimator, X, y, train, test, scorer, routed_params)
+            func(
+                clone(rfe),
+                self.estimator,
+                X,
+                y,
+                X_test,
+                y_test,
+                train,
+                test,
+                scorer,
+                routed_params,
+            )
             for train, test in cv.split(X, y, **routed_params.splitter.split)
         )
         scores, supports, rankings, step_n_features = zip(*step_results)
